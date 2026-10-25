@@ -155,7 +155,7 @@ class ModelRegistry:
         # ── XGBoost ────────────────────────────────────────────────────────
         logger.info("Training XGBoost …")
         xgb_model = xgb.XGBClassifier(
-            n_estimators=400, learning_rate=0.05, max_depth=5,
+            n_estimators=100, learning_rate=0.08, max_depth=4,
             subsample=0.8, colsample_bytree=0.8, use_label_encoder=False,
             eval_metric="logloss", random_state=42, n_jobs=-1, verbosity=0
         )
@@ -165,7 +165,7 @@ class ModelRegistry:
         # ── LightGBM ───────────────────────────────────────────────────────
         logger.info("Training LightGBM …")
         lgb_model = lgb.LGBMClassifier(
-            n_estimators=400, learning_rate=0.05, num_leaves=31,
+            n_estimators=100, learning_rate=0.08, num_leaves=20,
             subsample=0.8, colsample_bytree=0.8, random_state=42, n_jobs=-1, verbose=-1
         )
         lgb_model.fit(X_tr_s, y_tr)
@@ -174,7 +174,7 @@ class ModelRegistry:
         # ── CatBoost ───────────────────────────────────────────────────────
         logger.info("Training CatBoost …")
         cb_model = CatBoostClassifier(
-            iterations=400, learning_rate=0.05, depth=5,
+            iterations=100, learning_rate=0.08, depth=4,
             random_seed=42, verbose=0
         )
         cb_model.fit(X_tr_s, y_tr)
@@ -183,8 +183,8 @@ class ModelRegistry:
         # ── Neural Network ─────────────────────────────────────────────────
         logger.info("Training Neural Network …")
         nn_model = MLPClassifier(
-            hidden_layer_sizes=(128, 64), alpha=1e-3,
-            learning_rate_init=1e-3, max_iter=200, random_state=42
+            hidden_layer_sizes=(64, 32), alpha=1e-3,
+            learning_rate_init=1e-3, max_iter=30, early_stopping=True, random_state=42
         )
         nn_model.fit(X_tr_s, y_tr)
         self.models["neural_network"] = nn_model
