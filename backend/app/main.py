@@ -6,8 +6,9 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import DATA_PATH
+from app.database import init_db
 from app.services.model_service import init_registry
-from app.routers import predict, explain, dashboard, models, eda, profiles
+from app.routers import predict, explain, dashboard, models, eda, profiles, history
 
 logging.basicConfig(
     level=logging.INFO,
@@ -18,8 +19,11 @@ logger = logging.getLogger("insuresight")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Train models on startup, clean up on shutdown."""
-    logger.info("=== InsureSight startup: training models from %s ===", DATA_PATH)
+    """Initialise DB, train models on startup, clean up on shutdown."""
+    logger.info("=== InsureSight startup ===")
+    init_db()
+    logger.info("Database ready")
+    logger.info("Training models from %s …", DATA_PATH)
     init_registry(DATA_PATH)
     logger.info("=== Models ready ===")
     yield
@@ -48,6 +52,7 @@ app.include_router(dashboard.router)
 app.include_router(models.router)
 app.include_router(eda.router)
 app.include_router(profiles.router)
+app.include_router(history.router)
 
 
 @app.get("/api/health", tags=["health"])

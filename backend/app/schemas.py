@@ -50,6 +50,7 @@ class TopFactor(BaseModel):
 
 
 class PredictResponse(BaseModel):
+    prediction_id: Optional[str] = None
     prediction: Literal["Yes", "No"]
     probability: float
     risk_score: int

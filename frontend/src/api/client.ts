@@ -37,6 +37,7 @@ export interface TopFactor {
 }
 
 export interface PredictResponse {
+  prediction_id?: string;
   prediction: 'Yes' | 'No';
   probability: number;
   risk_score: number;
@@ -164,3 +165,38 @@ export const getEDADistributions = () =>
 
 export const getCorrelation = () =>
   api.get<{ x: string; y: string; r: number }[]>('/api/eda/correlation');
+
+export interface HistoryItem {
+  id: string;
+  created_at: string;
+  input_data: PredictRequest;
+  model_used: string;
+  prediction: 'Yes' | 'No';
+  probability: number;
+  risk_score: number;
+  risk_level: 'Low' | 'Medium' | 'High';
+  top_factors: TopFactor[];
+}
+
+export interface HistoryStats {
+  total: number;
+  by_risk_level: Record<string, number>;
+  by_model: Record<string, number>;
+}
+
+export const getPredictionHistory = (params?: {
+  limit?: number;
+  offset?: number;
+  risk_level?: string;
+  model?: string;
+}) => api.get<HistoryItem[]>('/api/history', { params });
+
+export const getPredictionStats = () =>
+  api.get<HistoryStats>('/api/history/stats');
+
+export const submitFeedback = (prediction_id: string, is_correct: boolean, comment?: string) =>
+  api.post<{ id: string; message: string }>('/api/history/feedback', {
+    prediction_id,
+    is_correct,
+    comment,
+  });

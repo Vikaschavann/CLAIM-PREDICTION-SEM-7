@@ -4,6 +4,7 @@ import { NavLink } from 'react-router-dom';
 const NAV_ITEMS = [
   { path: '/',                label: 'Dashboard'         },
   { path: '/predict',         label: 'Predict Claim'     },
+  { path: '/history',         label: 'Prediction Log'    },
   { path: '/profiles',        label: 'Risk Profiles'     },
   { path: '/explainability',  label: 'Explainability'    },
   { path: '/performance',     label: 'Model Performance' },

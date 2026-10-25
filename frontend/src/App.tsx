@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import Sidebar from './components/Sidebar';
 import Dashboard from './pages/Dashboard';
 import Predict from './pages/Predict';
+import History from './pages/History';
 import RiskProfiles from './pages/RiskProfiles';
 import Explainability from './pages/Explainability';
 import ModelPerformance from './pages/ModelPerformance';
@@ -18,6 +19,7 @@ export default function App() {
             <Routes>
               <Route path="/"               element={<Dashboard />} />
               <Route path="/predict"        element={<Predict />} />
+              <Route path="/history"        element={<History />} />
               <Route path="/profiles"       element={<RiskProfiles />} />
               <Route path="/explainability" element={<Explainability />} />
               <Route path="/performance"    element={<ModelPerformance />} />

@@ -1,7 +1,8 @@
 // Predict Claim page – form + risk gauge + SHAP/LIME explanation
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import {
-  predictClaim, explainShap, explainLime,
+  predictClaim, explainShap, explainLime, submitFeedback,
   type PredictRequest, type PredictResponse,
   type ShapResponse, type LimeResponse,
 } from '../api/client';
@@ -54,6 +55,7 @@ export default function Predict() {
   const [shapData, setShapData] = useState<ShapResponse | null>(null);
   const [limeData, setLimeData] = useState<LimeResponse | null>(null);
   const [tab, setTab] = useState<ExplainTab>('shap');
+  const [feedbackStatus, setFeedbackStatus] = useState<boolean | null>(null);
   const { toasts, addToast, dismiss } = useToasts();
 
   const set = (k: keyof PredictRequest, v: string | number) =>
@@ -64,6 +66,7 @@ export default function Predict() {
     setResult(null);
     setShapData(null);
     setLimeData(null);
+    setFeedbackStatus(null);
     try {
       const [predRes] = await Promise.all([
         predictClaim(form, model || undefined),
@@ -272,6 +275,53 @@ export default function Predict() {
                   <p className="text-xs text-text-muted mt-2">
                     Claim probability {(result.probability * 100).toFixed(0)}%. Portfolio average is ~26%.
                   </p>
+
+                  {/* SQLite Persisted Banner & Feedback */}
+                  <div className="mt-3 pt-3 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2 text-xs">
+                    <span className="text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded font-mono text-[11px] inline-flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                      Saved to DB
+                    </span>
+
+                    <div className="flex items-center gap-2">
+                      {feedbackStatus === null ? (
+                        <div className="flex items-center gap-1 text-slate-500">
+                          <span>Accurate?</span>
+                          <button
+                            onClick={async () => {
+                              if (result.prediction_id) {
+                                await submitFeedback(result.prediction_id, true);
+                                setFeedbackStatus(true);
+                                addToast('Marked prediction as accurate', 'success');
+                              }
+                            }}
+                            className="p-1 hover:bg-slate-100 rounded text-xs"
+                            title="Yes"
+                          >
+                            👍
+                          </button>
+                          <button
+                            onClick={async () => {
+                              if (result.prediction_id) {
+                                await submitFeedback(result.prediction_id, false);
+                                setFeedbackStatus(false);
+                                addToast('Feedback recorded for model review', 'success');
+                              }
+                            }}
+                            className="p-1 hover:bg-slate-100 rounded text-xs"
+                            title="No"
+                          >
+                            👎
+                          </button>
+                        </div>
+                      ) : (
+                        <span className="text-xs text-emerald-600 font-medium">✓ Feedback recorded</span>
+                      )}
+                      <Link to="/history" className="text-accent hover:underline text-xs ml-1">
+                        View Log →
+                      </Link>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
