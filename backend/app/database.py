@@ -1,17 +1,17 @@
-"""SQLite database layer for InsureSight.
+"""Dual database layer for InsureSight:
+- Supabase (PostgreSQL) when DATABASE_URL is provided in environment variables
+- SQLite fallback locally when no DATABASE_URL is set
 
 Tables:
   - predictions: logs every API prediction with inputs, outputs, timestamps
   - feedback:    optional user feedback on predictions (correct / incorrect)
-
-Uses Python's built-in sqlite3 — zero external dependencies.
-Thread-safe via check_same_thread=False + connection-per-request pattern.
 """
 from __future__ import annotations
-import sqlite3
+import os
 import json
 import logging
 import uuid
+import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 from contextlib import contextmanager
@@ -22,9 +22,17 @@ logger = logging.getLogger("insuresight.db")
 DB_DIR = Path(__file__).resolve().parent.parent / "data"
 DB_PATH = DB_DIR / "insuresight.db"
 
+# Check if Supabase / PostgreSQL URL is configured
+DATABASE_URL = os.getenv("DATABASE_URL", "").strip()
+# Handle 'postgres://' vs 'postgresql://' for psycopg2 compatibility
+if DATABASE_URL.startswith("postgres://"):
+    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
+
+IS_POSTGRES = bool(DATABASE_URL.startswith("postgresql://"))
+
 # ─── Schema ─────────────────────────────────────────────────────────────────
 
-_CREATE_TABLES = """
+_CREATE_TABLES_SQLITE = """
 CREATE TABLE IF NOT EXISTS predictions (
     id            TEXT PRIMARY KEY,
     created_at    TEXT NOT NULL,
@@ -51,37 +59,86 @@ CREATE INDEX IF NOT EXISTS idx_predictions_model      ON predictions(model_used)
 CREATE INDEX IF NOT EXISTS idx_feedback_prediction    ON feedback(prediction_id);
 """
 
+_CREATE_TABLES_PG = """
+CREATE TABLE IF NOT EXISTS predictions (
+    id            TEXT PRIMARY KEY,
+    created_at    TIMESTAMPTZ NOT NULL,
+    input_json    TEXT NOT NULL,
+    model_used    TEXT NOT NULL,
+    prediction    TEXT NOT NULL,
+    probability   FLOAT NOT NULL,
+    risk_score    INTEGER NOT NULL,
+    risk_level    TEXT NOT NULL,
+    top_factors   TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS feedback (
+    id              TEXT PRIMARY KEY,
+    prediction_id   TEXT NOT NULL REFERENCES predictions(id),
+    created_at      TIMESTAMPTZ NOT NULL,
+    is_correct      INTEGER NOT NULL,
+    comment         TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_predictions_created   ON predictions(created_at);
+CREATE INDEX IF NOT EXISTS idx_predictions_risk       ON predictions(risk_level);
+CREATE INDEX IF NOT EXISTS idx_predictions_model      ON predictions(model_used);
+CREATE INDEX IF NOT EXISTS idx_feedback_prediction    ON feedback(prediction_id);
+"""
+
 # ─── Connection helpers ─────────────────────────────────────────────────────
-
-def _get_conn() -> sqlite3.Connection:
-    """Create a new SQLite connection (safe for use in any thread)."""
-    DB_DIR.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(str(DB_PATH), check_same_thread=False)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA journal_mode=WAL")
-    conn.execute("PRAGMA busy_timeout=5000")
-    return conn
-
 
 @contextmanager
 def get_db():
-    """Context manager that yields a connection and commits/rolls back."""
-    conn = _get_conn()
-    try:
-        yield conn
-        conn.commit()
-    except Exception:
-        conn.rollback()
-        raise
-    finally:
-        conn.close()
+    """Context manager yielding a cursor and committing transactions."""
+    if IS_POSTGRES:
+        import psycopg2
+        from psycopg2.extras import RealDictCursor
+        conn = psycopg2.connect(DATABASE_URL, cursor_factory=RealDictCursor)
+        try:
+            with conn.cursor() as cur:
+                yield cur
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            conn.close()
+    else:
+        DB_DIR.mkdir(parents=True, exist_ok=True)
+        conn = sqlite3.connect(str(DB_PATH), check_same_thread=False)
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA busy_timeout=5000")
+        try:
+            cur = conn.cursor()
+            yield cur
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            conn.close()
 
 
 def init_db():
-    """Create tables if they don't exist yet. Call once at startup."""
-    with get_db() as conn:
-        conn.executescript(_CREATE_TABLES)
-    logger.info("SQLite database initialised at %s", DB_PATH)
+    """Create tables if they don't exist yet."""
+    if IS_POSTGRES:
+        try:
+            import psycopg2
+            conn = psycopg2.connect(DATABASE_URL)
+            with conn.cursor() as cur:
+                cur.execute(_CREATE_TABLES_PG)
+            conn.commit()
+            conn.close()
+            logger.info("Connected to Supabase PostgreSQL database successfully")
+        except Exception as e:
+            logger.error("Failed to connect to Supabase PostgreSQL: %s", e)
+            raise
+    else:
+        with get_db() as cur:
+            cur.executescript(_CREATE_TABLES_SQLITE)
+        logger.info("Local SQLite database initialised at %s", DB_PATH)
 
 
 # ─── CRUD: predictions ──────────────────────────────────────────────────────
@@ -98,12 +155,16 @@ def save_prediction(
     """Insert a prediction row and return its UUID."""
     pred_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc).isoformat()
-    with get_db() as conn:
-        conn.execute(
-            """INSERT INTO predictions
-               (id, created_at, input_json, model_used, prediction,
-                probability, risk_score, risk_level, top_factors)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+    ph = "%s" if IS_POSTGRES else "?"
+
+    sql = f"""INSERT INTO predictions
+              (id, created_at, input_json, model_used, prediction,
+               probability, risk_score, risk_level, top_factors)
+              VALUES ({ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph})"""
+
+    with get_db() as cur:
+        cur.execute(
+            sql,
             (
                 pred_id,
                 now,
@@ -116,16 +177,16 @@ def save_prediction(
                 json.dumps(top_factors),
             ),
         )
-    logger.debug("Saved prediction %s", pred_id)
+    logger.debug("Saved prediction %s to %s", pred_id, "Supabase" if IS_POSTGRES else "SQLite")
     return pred_id
 
 
 def get_prediction(pred_id: str) -> dict | None:
     """Fetch a single prediction by ID."""
-    with get_db() as conn:
-        row = conn.execute(
-            "SELECT * FROM predictions WHERE id = ?", (pred_id,)
-        ).fetchone()
+    ph = "%s" if IS_POSTGRES else "?"
+    with get_db() as cur:
+        cur.execute(f"SELECT * FROM predictions WHERE id = {ph}", (pred_id,))
+        row = cur.fetchone()
     if row is None:
         return None
     return _row_to_dict(row)
@@ -138,35 +199,47 @@ def list_predictions(
     model: str | None = None,
 ) -> list[dict]:
     """Return recent predictions with optional filters."""
+    ph = "%s" if IS_POSTGRES else "?"
     query = "SELECT * FROM predictions WHERE 1=1"
     params: list[Any] = []
     if risk_level:
-        query += " AND risk_level = ?"
+        query += f" AND risk_level = {ph}"
         params.append(risk_level)
     if model:
-        query += " AND model_used = ?"
+        query += f" AND model_used = {ph}"
         params.append(model)
-    query += " ORDER BY created_at DESC LIMIT ? OFFSET ?"
+    query += f" ORDER BY created_at DESC LIMIT {ph} OFFSET {ph}"
     params.extend([limit, offset])
-    with get_db() as conn:
-        rows = conn.execute(query, params).fetchall()
+
+    with get_db() as cur:
+        cur.execute(query, tuple(params))
+        rows = cur.fetchall()
     return [_row_to_dict(r) for r in rows]
 
 
 def count_predictions() -> dict:
     """Return summary counts for the history dashboard."""
-    with get_db() as conn:
-        total = conn.execute("SELECT COUNT(*) FROM predictions").fetchone()[0]
-        by_risk = conn.execute(
-            "SELECT risk_level, COUNT(*) as cnt FROM predictions GROUP BY risk_level"
-        ).fetchall()
-        by_model = conn.execute(
-            "SELECT model_used, COUNT(*) as cnt FROM predictions GROUP BY model_used"
-        ).fetchall()
+    with get_db() as cur:
+        cur.execute("SELECT COUNT(*) FROM predictions")
+        first = cur.fetchone()
+        total = first[0] if isinstance(first, (tuple, list)) else first["count"]
+
+        cur.execute("SELECT risk_level, COUNT(*) as cnt FROM predictions GROUP BY risk_level")
+        by_risk = cur.fetchall()
+
+        cur.execute("SELECT model_used, COUNT(*) as cnt FROM predictions GROUP BY model_used")
+        by_model = cur.fetchall()
+
     return {
         "total": total,
-        "by_risk_level": {r["risk_level"]: r["cnt"] for r in by_risk},
-        "by_model": {r["model_used"]: r["cnt"] for r in by_model},
+        "by_risk_level": {
+            (r[0] if isinstance(r, (tuple, list)) else r["risk_level"]): (r[1] if isinstance(r, (tuple, list)) else r["cnt"])
+            for r in by_risk
+        },
+        "by_model": {
+            (r[0] if isinstance(r, (tuple, list)) else r["model_used"]): (r[1] if isinstance(r, (tuple, list)) else r["cnt"])
+            for r in by_model
+        },
     }
 
 
@@ -176,30 +249,39 @@ def save_feedback(prediction_id: str, is_correct: bool, comment: str | None = No
     """Attach user feedback to a prediction."""
     fb_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc).isoformat()
-    with get_db() as conn:
-        conn.execute(
-            """INSERT INTO feedback (id, prediction_id, created_at, is_correct, comment)
-               VALUES (?, ?, ?, ?, ?)""",
-            (fb_id, prediction_id, now, int(is_correct), comment),
-        )
+    ph = "%s" if IS_POSTGRES else "?"
+
+    sql = f"""INSERT INTO feedback (id, prediction_id, created_at, is_correct, comment)
+              VALUES ({ph}, {ph}, {ph}, {ph}, {ph})"""
+
+    with get_db() as cur:
+        cur.execute(sql, (fb_id, prediction_id, now, int(is_correct), comment))
     return fb_id
 
 
 def get_feedback_for_prediction(prediction_id: str) -> list[dict]:
     """Get all feedback entries for a given prediction."""
-    with get_db() as conn:
-        rows = conn.execute(
-            "SELECT * FROM feedback WHERE prediction_id = ? ORDER BY created_at DESC",
+    ph = "%s" if IS_POSTGRES else "?"
+    with get_db() as cur:
+        cur.execute(
+            f"SELECT * FROM feedback WHERE prediction_id = {ph} ORDER BY created_at DESC",
             (prediction_id,),
-        ).fetchall()
+        )
+        rows = cur.fetchall()
     return [dict(r) for r in rows]
 
 
 # ─── Helpers ─────────────────────────────────────────────────────────────────
 
-def _row_to_dict(row: sqlite3.Row) -> dict:
-    """Convert a predictions Row to a dict, deserialising JSON fields."""
+def _row_to_dict(row: Any) -> dict:
+    """Convert a row to a dict, deserialising JSON fields and normalizing timestamps."""
     d = dict(row)
-    d["input_data"] = json.loads(d.pop("input_json"))
-    d["top_factors"] = json.loads(d["top_factors"])
+    if isinstance(d.get("created_at"), datetime):
+        d["created_at"] = d["created_at"].isoformat()
+    if isinstance(d.get("input_json"), str):
+        d["input_data"] = json.loads(d.pop("input_json"))
+    elif "input_json" in d:
+        d["input_data"] = d.pop("input_json")
+    if isinstance(d.get("top_factors"), str):
+        d["top_factors"] = json.loads(d["top_factors"])
     return d

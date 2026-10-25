@@ -1,7 +1,9 @@
 """Central configuration for InsureSight backend."""
 from pathlib import Path
+from dotenv import load_dotenv
 
 BASE_DIR = Path(__file__).resolve().parent.parent
+load_dotenv(BASE_DIR / ".env")
 
 # Data / model paths
 DATA_PATH = BASE_DIR / "data" / "insurance.csv"

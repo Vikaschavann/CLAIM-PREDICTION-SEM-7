@@ -1,68 +1,81 @@
-# InsureSight Deployment Guide (Render + Vercel)
+# InsureSight Deployment & Setup Guide
 
-This project has been updated with a **persistent SQLite database** and configured for cloud deployment:
-- **Backend:** [Render.com](https://render.com) (FastAPI + SQLite + ML Models)
+This project is configured for:
+- **Cloud Database:** [Supabase](https://supabase.com) (PostgreSQL) with automatic local SQLite fallback
+- **Backend:** [Render.com](https://render.com) (FastAPI + ML Models)
 - **Frontend:** [Vercel](https://vercel.com) (React + Vite + Tailwind)
 
 ---
 
-## 1. Push Your Code to GitHub
+## 1. Fix Git Push Authentication & Push Code
 
-If you haven't already, push all latest files to your GitHub repository:
+GitHub disabled regular password authentication for git operations. You must use a **Personal Access Token (PAT)** or **GitHub CLI**:
 
+### Option A: Using a GitHub Personal Access Token (PAT) — Recommended
+1. Go to your GitHub account: **Settings** → **Developer Settings** → **Personal Access Tokens** → **Tokens (classic)**  
+   (Direct link: https://github.com/settings/tokens)
+2. Click **Generate new token (classic)**.
+3. Name it (e.g., `insuresight-token`), set expiration, and check the **`repo`** scope.
+4. Copy the generated token (starts with `ghp_...`).
+5. Run the push command pointing to `master`:
+   ```bash
+   git push https://<YOUR_GITHUB_USERNAME>:<YOUR_TOKEN>@github.com/Vikaschavann/CLAIM-PREDICTION-SEM-7.git master
+   ```
+   *(Replace `<YOUR_GITHUB_USERNAME>` and `<YOUR_TOKEN>` with your actual GitHub username and the copied token)*
+
+### Option B: Using GitHub CLI (Easiest if installed)
 ```bash
-git add .
-git commit -m "feat: add SQLite database, history logs, and deployment configurations"
-git push origin main
+gh auth login
+git push origin master
 ```
 
 ---
 
-## 2. Deploy Backend to Render (Free)
+## 2. Set Up Supabase (Free Cloud PostgreSQL Database)
+
+1. Sign up / Log in to [Supabase](https://supabase.com/).
+2. Click **New Project** and choose a project name and database password.
+3. Once the project is provisioned, go to **Project Settings** (gear icon) → **Database**.
+4. Scroll to **Connection string** → click the **URI** tab.
+5. Copy the connection string. It looks like:
+   ```
+   postgresql://postgres.[ref]:[YOUR-PASSWORD]@aws-0-ap-south-1.pooler.supabase.com:6543/postgres
+   ```
+   *(Replace `[YOUR-PASSWORD]` with your project's database password)*
+
+---
+
+## 3. Deploy Backend to Render (Free)
 
 1. Go to [dashboard.render.com](https://dashboard.render.com/) and sign in.
 2. Click **New +** → **Web Service**.
 3. Select your GitHub repository (`CLAIM-PREDICTION-SEM-7`).
-4. Configure the service settings:
-   - **Name:** `insuresight-backend` (or any name you prefer)
+4. Configure settings:
+   - **Name:** `insuresight-backend`
    - **Root Directory:** `backend`
    - **Runtime:** `Python 3`
    - **Build Command:** `pip install --upgrade pip && pip install -r requirements.txt`
    - **Start Command:** `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
    - **Instance Type:** `Free`
-5. Click **Create Web Service**.
-6. Render will build the service, train the models from `data/insurance.csv`, and start FastAPI.
+5. Under **Environment Variables**, add:
+   - **Key:** `DATABASE_URL`
+   - **Value:** `[Paste your Supabase URI from Step 2]`
+6. Click **Create Web Service**.
 7. Once finished, copy your Render URL:  
    👉 `https://insuresight-backend.onrender.com`
 
-> **Note on Database Persistence:** Render free instances spin down when inactive. If you want permanent disk persistence for your SQLite database across restarts on Render, attach a free/low-cost Persistent Disk to the `/app/data` mount path in the Render dashboard (Disks tab).
-
 ---
 
-## 3. Deploy Frontend to Vercel (Free)
+## 4. Deploy Frontend to Vercel (Free)
 
 1. Go to [vercel.com](https://vercel.com/) and log in.
 2. Click **Add New…** → **Project**.
 3. Import your GitHub repository (`CLAIM-PREDICTION-SEM-7`).
-4. Configure the project:
+4. Configure:
    - **Framework Preset:** `Vite`
    - **Root Directory:** click `Edit` and select `frontend`
-5. Open the **Environment Variables** section and add:
+5. In **Environment Variables**:
    - **Key:** `VITE_API_URL`
-   - **Value:** `https://your-backend-name.onrender.com` *(paste your Render backend URL from step 2, no trailing slash)*
+   - **Value:** `https://your-backend-name.onrender.com` *(from Render, no trailing slash)*
 6. Click **Deploy**.
-7. In ~60 seconds, your application will be live at `https://your-app.vercel.app`!
-
----
-
-## 4. Local Testing with Docker (Optional)
-
-You can also run both frontend and backend locally with Docker:
-
-```bash
-docker compose up --build
-```
-
-- Frontend: `http://localhost:5173`
-- Backend API Docs: `http://localhost:8000/docs`
-- SQLite Database: stored persistently in `backend/data/insuresight.db`
+7. Your app is live in ~60 seconds!
