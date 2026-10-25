@@ -1,0 +1,169 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }
+
+  html, body, #root {
+    height: 100%;
+    font-family: 'Inter', system-ui, sans-serif;
+    background-color: #F3F5F9;
+    color: #0F1B2D;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  :focus-visible {
+    outline: 2px solid #0B7A6E;
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+}
+
+@layer components {
+  .card {
+    @apply bg-white border border-card-border rounded-card shadow-card;
+  }
+
+  .btn-primary {
+    @apply bg-accent hover:bg-accent-light text-white font-semibold px-5 py-2.5 rounded-lg
+           transition-all duration-200 focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2
+           disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+
+  .btn-secondary {
+    @apply bg-white border border-card-border hover:bg-gray-50 text-text-primary font-semibold px-5 py-2.5 rounded-lg
+           transition-all duration-200 focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2;
+  }
+
+  .form-label {
+    @apply block text-xs font-semibold text-text-secondary uppercase tracking-wider mb-1.5;
+  }
+
+  .form-input {
+    @apply w-full px-3 py-2.5 border border-card-border rounded-lg text-sm text-text-primary
+           focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent
+           transition-all duration-150 bg-white placeholder-text-muted;
+  }
+
+  .form-select {
+    @apply w-full px-3 py-2.5 border border-card-border rounded-lg text-sm text-text-primary
+           focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent
+           transition-all duration-150 bg-white appearance-none cursor-pointer;
+  }
+
+  .risk-badge-high {
+    @apply inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold
+           bg-high-risk-bg text-high-risk;
+  }
+
+  .risk-badge-medium {
+    @apply inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold
+           bg-medium-risk-bg text-medium-risk;
+  }
+
+  .risk-badge-low {
+    @apply inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold
+           bg-low-risk-bg text-low-risk;
+  }
+
+  .kpi-card {
+    @apply card p-5 flex flex-col gap-1;
+  }
+
+  .page-title {
+    @apply text-2xl font-bold text-text-primary;
+  }
+
+  .page-subtitle {
+    @apply text-sm text-accent mt-0.5;
+  }
+
+  .section-heading {
+    @apply text-base font-semibold text-text-primary;
+  }
+
+  .skeleton {
+    @apply animate-pulse bg-gray-200 rounded;
+  }
+
+  .data-table {
+    @apply w-full text-sm text-left;
+  }
+
+  .data-table th {
+    @apply text-xs font-semibold text-text-secondary uppercase tracking-wider py-3 px-4 border-b border-card-border;
+  }
+
+  .data-table td {
+    @apply py-3 px-4 border-b border-card-border text-text-primary;
+  }
+
+  .data-table tr:last-child td {
+    @apply border-b-0;
+  }
+
+  .data-table tr:hover td {
+    @apply bg-gray-50;
+  }
+
+  .tab-btn {
+    @apply px-4 py-2 text-sm font-medium rounded-lg transition-all duration-150;
+  }
+
+  .tab-btn-active {
+    @apply bg-accent text-white;
+  }
+
+  .tab-btn-inactive {
+    @apply text-text-secondary hover:text-text-primary hover:bg-gray-100;
+  }
+}
+
+@layer utilities {
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: #E3E8EF transparent;
+  }
+
+  .text-balance {
+    text-wrap: balance;
+  }
+}
+
+/* Risk gauge animation */
+@keyframes gauge-fill {
+  from { stroke-dasharray: 0 251; }
+  to { stroke-dasharray: var(--gauge-value) 251; }
+}
+
+.gauge-arc {
+  animation: gauge-fill 0.8s ease-out forwards;
+  transition: stroke-dasharray 0.8s ease-out;
+}
+
+/* Fade-in animation */
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.fade-in-up {
+  animation: fadeInUp 0.3s ease-out both;
+}
+
+/* Sidebar nav item hover */
+.nav-item {
+  @apply flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium cursor-pointer
+         transition-all duration-150 text-slate-300 hover:text-white hover:bg-sidebar-hover;
+}
+
+.nav-item-active {
+  @apply text-white bg-sidebar-hover;
+}
