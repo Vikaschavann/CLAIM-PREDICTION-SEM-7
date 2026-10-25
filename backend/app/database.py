@@ -123,6 +123,7 @@ def get_db():
 
 def init_db():
     """Create tables if they don't exist yet."""
+    global IS_POSTGRES
     if IS_POSTGRES:
         try:
             import psycopg2
@@ -132,13 +133,14 @@ def init_db():
             conn.commit()
             conn.close()
             logger.info("Connected to Supabase PostgreSQL database successfully")
+            return
         except Exception as e:
-            logger.error("Failed to connect to Supabase PostgreSQL: %s", e)
-            raise
-    else:
-        with get_db() as cur:
-            cur.executescript(_CREATE_TABLES_SQLITE)
-        logger.info("Local SQLite database initialised at %s", DB_PATH)
+            logger.warning("Supabase PostgreSQL connection failed (%s). Gracefully falling back to SQLite.", e)
+            IS_POSTGRES = False
+
+    with get_db() as cur:
+        cur.executescript(_CREATE_TABLES_SQLITE)
+    logger.info("Local SQLite database initialised at %s", DB_PATH)
 
 
 # ─── CRUD: predictions ──────────────────────────────────────────────────────
